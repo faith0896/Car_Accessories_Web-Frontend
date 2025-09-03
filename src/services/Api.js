@@ -1,11 +1,9 @@
-// src/services/Api.js
 import axios from "axios";
 
 const api = axios.create({
   baseURL: "http://localhost:8080/CarAccessories",
 });
 
-// ✅ Attach token (if exists) to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -14,67 +12,36 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ================= AUTH =================
-
-// Register user
-export const registerUser = (userData) =>
-  api.post("/auth/register", userData);
-
-// Login user (returns token)
+// AUTH
+export const registerUser = (userData) => api.post("/auth/register", userData);
 export const loginUser = (credentials) =>
   api.post("/auth/login", {
     username: credentials.username || credentials.email,
     password: credentials.password,
   });
-
 export const getBuyerByEmail = (email) => api.get(`/buyer/read/${email}`);
-
-// ✅ Fetch currently logged-in user from DB
 export const getLoggedUser = () => api.get("/auth/me");
 
-// ================= PRODUCT =================
-
-// Fetch all products
+// PRODUCT
 export const getProducts = () => api.get("/product/all");
+export const getProductById = (productId) => api.get(`/product/${productId}`);
 
-// ================= CART =================
-
-// Create cart (checkout)
-export const createCart = (cartData) =>
-  api.post("/cart/checkout", cartData);
-
-// Update quantity of a cart item
+// CART
+export const createCart = (cartData) => api.post("/cart/checkout", cartData);
 export const updateCartItem = (cartId, cartItemId, data) =>
   api.put(`/cart/${cartId}/items/${cartItemId}`, data);
-
-// Delete one item from cart
 export const deleteCartItem = (cartId, productId) =>
   api.delete(`/cart/${cartId}/items/${productId}`);
+export const getCart = (buyerId) => api.get(`/cart/by-buyer/${buyerId}`);
 
-// Fetch buyer's cart
-export const getCart = (buyerId) =>
-  api.get(`/cart/by-buyer/${buyerId}`);
-
-// ================= ORDER =================
-
-// Fetch orders by buyerId (if backend supports it)
-export const getOrdersByBuyerId = (buyerId) =>
-  api.get(`/orders/buyer/${buyerId}`);
-
-// Create order
-export const createOrder = (orderData) =>
-  api.post("/order/create", orderData);
-
-// Fetch all orders
+// ORDER
+export const getOrdersByBuyerId = (buyerId) => api.get(`/orders/buyer/${buyerId}`);
+export const createOrder = (orderData) => api.post("/order/create", orderData);
 export const getAllOrders = () => api.get("/order/All");
-
-// ✅ Fetch single order by orderId
 export const getOrderById = (orderId) => api.get(`/order/${orderId}`);
 
-// ================= PAYMENT =================
+// PAYMENT
+export const createPayment = (paymentData) => api.post("/payment/create", paymentData);
 
-// Create payment
-export const createPayment = (paymentData) =>
-  api.post("/payment/create", paymentData);
-
+// Default export the axios instance if you want (optional)
 export default api;
