@@ -1,11 +1,28 @@
 import { createContext, useState, useContext, useEffect } from "react";
-import { createCart, updateCartItem, deleteCartItem, getCart } from "../services/Api";
+import { useAuth } from "./AuthContext";
 
 const CartContext = createContext();
 
 export function CartProvider({ children }) {
-  const [cartItems, setCartItems] = useState([]);
+  // Listen for logout event to clear cart
+  useEffect(() => {
+    const handleClearCart = () => {
+      clearCart();
+    };
+    window.addEventListener('clear-cart', handleClearCart);
+    return () => window.removeEventListener('clear-cart', handleClearCart);
+  }, []);
+  const { user, token, loading } = useAuth();
+  const [cartItems, setCartItems] = useState(() => {
+    try {
+      const saved = localStorage.getItem("cart");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [cartId, setCartId] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [lastOrder, setLastOrder] = useState(() => {
     try {
       const savedOrder = localStorage.getItem("lastOrder");
@@ -15,119 +32,74 @@ export function CartProvider({ children }) {
     }
   });
 
-  const userId = 1; 
-
-  // Fetch cart from backend 
+  // Set userId once auth is ready
   useEffect(() => {
-    async function fetchCart() {
-      try {
-        const response = await getCart(userId);
-        if (response.data) {
-          setCartItems(response.data.cartItems);
-          setCartId(response.data.cartId);
-        }
-      } catch (error) {
-        console.error("Error fetching cart:", error.response?.data || error.message);
-      }
-    }
-    fetchCart();
-  }, []);
+    if (loading) return;
 
-  
-  useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(cartItems));
-  }, [cartItems]);
-
-  useEffect(() => {
-    if (lastOrder) {
-      localStorage.setItem("lastOrder", JSON.stringify(lastOrder));
-    } else {
-      localStorage.removeItem("lastOrder");
-    }
-  }, [lastOrder]);
-
-  const keyOf = (p) => p.productId ?? p.id;
-
-  // Add item to cart (and backend)
-  const addToCart = async (product) => {
-    const id = keyOf(product);
-    const existing = cartItems.find((item) => keyOf(item) === id);
-
-    if (existing) {
-      updateQuantity(id, existing.quantity + 1);
+    if (!user || !token) {
+      console.log("No logged-in user detected. Skipping cart setup.");
       return;
     }
 
-    
-    const newItem = { ...product, quantity: 1 };
-    setCartItems((prev) => [...prev, newItem]);
+    const id = user.userId || user.id || user?._id;
+    if (id) setUserId(String(id));
+    else console.log("Logged-in user has no userId.", user);
+  }, [user, token, loading]);
 
-    // Send to backend
+  // Save cart to localStorage whenever cartItems change
+  useEffect(() => {
     try {
-      if (cartId) {
-        await createCart({ buyerId: userId, cartItems: [...cartItems, newItem] });
-      }
-    } catch (error) {
-      console.error("Error adding to cart:", error.response?.data || error.message);
+      localStorage.setItem("cart", JSON.stringify(cartItems));
+    } catch {}
+  }, [cartItems]);
+
+  const keyOf = (p) => p.productId ?? p.id;
+
+  // Add or update cart item
+  const addToCart = async (product) => {
+    const id = keyOf(product);
+    const existing = cartItems.find((item) => keyOf(item) === id);
+    let updatedItems;
+    if (existing) {
+      updatedItems = cartItems.map((it) =>
+        keyOf(it) === id ? { ...it, quantity: it.quantity + 1 } : it
+      );
+    } else {
+      updatedItems = [...cartItems, { ...product, quantity: 1 }];
     }
-  };
-
-  
-  const removeFromCart = async (productId) => {
-    const itemToRemove = cartItems.find((item) => keyOf(item) === productId);
-    if (!itemToRemove) return;
-
-    setCartItems((prev) => prev.filter((item) => keyOf(item) !== productId));
-
-    try {
-      if (cartId && itemToRemove.cartItemId) {
-        await deleteCartItem(cartId, itemToRemove.cartItemId);
-      }
-    } catch (error) {
-      console.error("Error removing cart item:", error.response?.data || error.message);
-    }
-  };
-
-  // Update quantity (and backend)
-  const updateQuantity = async (productId, quantity) => {
-    const itemToUpdate = cartItems.find((item) => keyOf(item) === productId);
-    if (!itemToUpdate) return;
-
-    const updatedItems = cartItems.map((item) =>
-      keyOf(item) === productId ? { ...item, quantity: Number(quantity) } : item
-    );
     setCartItems(updatedItems);
+  };
 
-    try {
-      if (cartId && itemToUpdate.cartItemId) {
-        await updateCartItem(cartId, itemToUpdate.cartItemId, { quantity: Number(quantity) });
-      }
-    } catch (error) {
-      console.error("Error updating cart item:", error.response?.data || error.message);
-    }
+  const removeFromCart = async (productId) => {
+    const updated = cartItems.filter((item) => keyOf(item) !== productId);
+    setCartItems(updated);
+  };
+
+  const updateQuantity = async (productId, quantity) => {
+    const updated = cartItems.map((it) =>
+      keyOf(it) === productId ? { ...it, quantity: Number(quantity) } : it
+    );
+    setCartItems(updated);
   };
 
   const clearCart = async () => {
     setCartItems([]);
     localStorage.removeItem("cart");
-
-    if (cartId) {
-      // optionally clear backend cart
-      for (const item of cartItems) {
-        if (item.cartItemId) {
-          await deleteCartItem(cartId, item.cartItemId);
-        }
-      }
-    }
   };
 
-  const saveLastOrder = (order) => setLastOrder(order);
+  const saveLastOrder = (order) => {
+    setLastOrder(order);
+    try {
+      localStorage.setItem("lastOrder", JSON.stringify(order));
+    } catch {}
+  };
+
   const clearLastOrder = () => {
     setLastOrder(null);
     localStorage.removeItem("lastOrder");
   };
 
-  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  const cartCount = (cartItems || []).reduce((acc, it) => acc + (it.quantity || 0), 0);
 
   return (
     <CartContext.Provider
@@ -142,6 +114,8 @@ export function CartProvider({ children }) {
         saveLastOrder,
         clearLastOrder,
         cartId,
+        setCartId,
+        userId,
       }}
     >
       {children}
@@ -152,8 +126,4 @@ export function CartProvider({ children }) {
 export function useCart() {
   return useContext(CartContext);
 }
-
-
-
-
 

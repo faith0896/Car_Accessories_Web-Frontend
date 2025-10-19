@@ -1,12 +1,43 @@
 import { useCart } from "../context/CartContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import {createCart} from "../services/Api.js";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function CartPage({ onClose }) {
-  const { cartItems, removeFromCart, updateQuantity } = useCart();
+  const {
+    cartItems = [],
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    userId,
+    cartId,
+    setCartId,
+  } = useCart();
+
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+
+  const getLocalUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      return user?.userId || user?.id || null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin?.()) {
+      alert("Admins are not allowed to perform checkout.");
+      navigate("/");
+    }
+  }, [isAdmin, navigate]);
+
+  useEffect(() => {
+    console.log("Cart items:", cartItems);
+  }, [cartItems]);
 
   const handleQuantityChange = (productId, quantity) => {
     let qty = parseInt(quantity, 10);
@@ -15,40 +46,46 @@ export default function CartPage({ onClose }) {
   };
 
   const cartTotal = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + (item.price || 0) * (item.quantity || 1),
     0
   );
 
-   const handleCheckout = async () => {
-  if (!cartItems.length) return;
+  const handleCheckout = async () => {
+    if (isAdmin?.()) {
+      alert("Admins are not allowed to checkout.");
+      return;
+    }
 
-  try {
-    const cartPayload = {
-      buyer: { userId: 1 }, 
-      cartItems: cartItems.map(item => ({
-        quantity: item.quantity,
-        product: { productId: item.productId || item.id }
-      }))
-    };
+    if (!cartItems.length) {
+      alert("Your cart is empty.");
+      return;
+    }
 
-    const response = await createCart(cartPayload); // this calls /cart/checkout
-    console.log(" Cart saved:", response.data);
+    const localUserId = getLocalUserId();
+    if (!localUserId) {
+      alert("You must be logged in to checkout.");
+      navigate("/login");
+      return;
+    }
 
-    localStorage.setItem("cart", JSON.stringify(cartItems));
-    if (onClose) onClose();
-    navigate("/payment", { state: { cartItems } });
-
-  } catch (error) {
-    console.error("Error saving cart:", error.response?.data || error.message);
-    alert("Could not save cart. Please try again.");
-  }
-};
+    setLoading(true);
+    try {
+      clearCart();
+      if (onClose) onClose();
+      navigate("/payment", {
+        state: { cartItems, total: cartTotal },
+      });
+    } catch (error) {
+      alert("Checkout failed: " + (error?.message || "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="cart-container">
       <div className="cart-header">
         <h2>Your Cart</h2>
-        <button className="close-cart" onClick={onClose}>✖</button>
       </div>
 
       {cartItems.length === 0 ? (
@@ -58,10 +95,17 @@ export default function CartPage({ onClose }) {
           {cartItems.map((item) => (
             <div key={item.productId || item.id} className="cart-item-card">
               <div className="cart-item-left">
-                <img src={item.imageURL || item.image} alt={item.name} className="cart-item-image" />
+                <img
+                  src={`http://localhost:8080/CarAccessories/product/image/${
+                    item.productId || item.id
+                  }`}
+                  alt={item.name}
+                  className="cart-item-image"
+                  onError={(e) => (e.target.src = "/placeholder.png")}
+                />
                 <div className="cart-item-info">
                   <h3>{item.name}</h3>
-                  <p>R {item.price.toFixed(2)}</p>
+                  <p>R {item.price?.toFixed(2)}</p>
                   <input
                     type="number"
                     value={item.quantity}
@@ -80,6 +124,7 @@ export default function CartPage({ onClose }) {
                 className="remove-btn"
                 onClick={() => removeFromCart(item.productId || item.id)}
                 title="Remove item"
+                aria-label={`Remove ${item.name} from cart`}
               >
                 <Trash2 size={20} />
               </button>
@@ -90,34 +135,130 @@ export default function CartPage({ onClose }) {
 
           <div className="checkout-section">
             <p className="delivery-info">
-              Order will be delivered in 3-5 working days
+              Order will be delivered in 3–5 working days.
             </p>
-            <button className="checkout-btn" onClick={handleCheckout}>
-              Checkout
+            <button
+              className="checkout-btn"
+              onClick={handleCheckout}
+              disabled={loading || cartItems.length === 0}
+            >
+              {loading ? "Processing..." : "Checkout"}
             </button>
           </div>
         </div>
       )}
 
       <style>{`
-        .cart-container { padding: 20px; }
-        .cart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .close-cart { background: none; border: none; font-size: 1.4rem; cursor: pointer; }
-        .empty-cart { text-align: center; font-size: 18px; color: #555; }
-        .cart-box { display: flex; flex-direction: column; gap: 15px; }
-        .cart-item-card { display: flex; justify-content: space-between; align-items: center; border: 1px solid #ddd; padding: 15px; border-radius: 10px; background: #fff; }
-        .cart-item-left { display: flex; align-items: center; gap: 15px; }
-        .cart-item-image { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; }
-        .cart-item-info h3 { font-size: 16px; margin-bottom: 5px; }
-        .quantity-input { width: 45px; border: 1px solid #ccc; border-radius: 5px; padding: 2px; margin: 5px 0; }
-        .item-total { font-size: 14px; font-weight: bold; margin-top: 4px; }
-        .remove-btn { background: transparent; border: none; cursor: pointer; color: #ff4444; }
-        .remove-btn:hover { color: #cc0000; }
-        .cart-total { text-align: right; font-size: 20px; font-weight: bold; margin-top: 15px; }
-        .checkout-section { margin-top: 20px; text-align: center; }
-        .checkout-btn { background: #ffd600; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; }
-        .checkout-btn:hover { background: #ffb300; }
+        html, body, #root {
+          height: 100%;
+          margin: 0;
+          background-color: #f0f0f0;
+        }
+        .cart-container {
+          padding: 20px;
+          max-width: 600px;
+          margin: 0 auto;
+          background-color: #f0f0f0;
+          min-height: calc(100vh - 84px);
+        }
+        .cart-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+        }
+        .empty-cart {
+          text-align: center;
+          font-size: 18px;
+          color: #555;
+          padding: 40px;
+        }
+        .cart-box {
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+        }
+        .cart-item-card {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          border: 1px solid #ddd;
+          padding: 15px;
+          border-radius: 10px;
+          background: #fff;
+        }
+        .cart-item-left {
+          display: flex;
+          align-items: flex-start;
+          gap: 15px;
+        }
+        .cart-item-image {
+          width: 80px;
+          height: 80px;
+          object-fit: cover;
+          border-radius: 8px;
+        }
+        .cart-item-info h3 {
+          margin: 0 0 5px;
+          font-size: 16px;
+        }
+        .cart-item-info p {
+          margin: 2px 0;
+          font-size: 14px;
+        }
+        .quantity-input {
+          width: 50px;
+          padding: 4px;
+          border-radius: 4px;
+          border: 1px solid #ccc;
+          margin-top: 5px;
+        }
+        .item-total {
+          font-weight: 600;
+          margin-top: 5px;
+          color: #242424ff;
+        }
+        .remove-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #09c;
+          margin-top: 10px;
+        }
+        .cart-total {
+          margin-top: 20px;
+          font-weight: 700;
+          text-align: right;
+        }
+        .checkout-section {
+          margin-top: 20px;
+          text-align: center;
+        }
+        .delivery-info {
+          margin-bottom: 10px;
+          color: #666;
+          font-size: 14px;
+        }
+        .checkout-btn {
+          background-color: #09c;
+          color: white;
+          padding: 12px 30px;
+          border-radius: 8px;
+          border: none;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background-color 0.3s ease;
+          font-size: 16px;
+        }
+        .checkout-btn:disabled {
+          background-color: #a0aec0;
+          cursor: not-allowed;
+        }
+        .checkout-btn:hover:not(:disabled) {
+          background-color: #2563eb;
+        }
       `}</style>
     </div>
   );
 }
+

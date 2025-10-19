@@ -1,77 +1,217 @@
 import { useEffect, useState } from "react";
 import { useCart } from "../context/CartContext.jsx";
-import { getProducts } from "../services/Api.js";
+import axios from "axios";
 
 export default function Shop() {
-  const { addToCart } = useCart();
-  const [products, setProducts] = useState([]);
+    const { addToCart } = useCart();
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-  useEffect(() => {
-    getProducts()
-      .then(res => setProducts(res.data))
-      .catch(err => console.error("Error fetching products:", err));
-  }, []);
+    // API URLs
+    const PRODUCTS_API = "http://localhost:8080/CarAccessories/product/all";
 
-  const renderCollection = (title, products) => (
-    <div className="collection-box">
-      <h2 className="shop-title">{title}</h2>
-      <div className="products-scroll">
-        {products.map((prod) => (
-          <div key={prod.productId} className="product-card">
-            <div className="product-image-box">
-              
-              <img
-                src={`http://localhost:8080/${prod.imagePath}`}
-                alt={prod.name}
-                className="product-image"
-              />
+    useEffect(() => {
+        const fetchProducts = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const res = await axios.get(PRODUCTS_API);
+                console.log("Fetched products", res.data);
+                setProducts(res.data);
+            } catch (err) {
+                console.error("Error fetching products:", err);
+                setError("Failed to load products.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProducts();
+    }, []);
+
+    const renderCollection = (title, products) => (
+        <div className="collection-box" key={title}>
+            <h2 className="shop-title">{title}</h2>
+            <div className="products-scroll">
+                {products.map((prod) => (
+                    <div key={prod.productId} className="product-card">
+                        <div className="product-image-box">
+                            <img
+                                src={`http://localhost:8080/CarAccessories/product/image/${prod.productId}`}
+                                alt={prod.name}
+                                className="product-image"
+                                onError={(e) => {
+                                    e.target.src = "/placeholder.png"; // fallback image
+                                }}
+                            />
+                        </div>
+                        <div className="product-info">
+                            <h3>{prod.name}</h3>
+                            <p>
+                                <strong>Brand:</strong> {prod.brand}
+                            </p>
+                            <p>
+                                <strong>Size:</strong> {prod.size}
+                            </p>
+                            <p>
+                                <strong>Material:</strong> {prod.material}
+                            </p>
+                            <p>{prod.description}</p>
+                            <p>R {Number(prod.price).toFixed(2)}</p>
+                            <p>
+                                <strong>Stock:</strong> {prod.stockQuantity}
+                            </p>
+                            <button
+                                className="add-to-cart"
+                                disabled={prod.stockQuantity <= 0}
+                                onClick={async () => {
+                                    try {
+                                        // Add to frontend cart context
+                                        addToCart(prod);
+
+                                        // Call backend to decrease stock
+                                        const res = await axios.post(
+                                            `http://localhost:8080/CarAccessories/product/purchase/${prod.productId}`,
+                                            null,
+                                            { params: { quantity: 1 } } // Decrease by 1 per add-to-cart
+                                        );
+
+                                        console.log(res.data);
+
+                                        // Update UI stock immediately
+                                        setProducts(prev =>
+                                            prev.map(p =>
+                                                p.productId === prod.productId
+                                                    ? { ...p, stockQuantity: p.stockQuantity - 1 }
+                                                    : p
+                                            )
+                                        );
+                                    } catch (err) {
+                                        console.error("❌ Error purchasing product:", err);
+                                        alert("Purchase failed. Product may be out of stock.");
+                                    }
+                                }}
+                            >
+                                {prod.stockQuantity <= 0 ? "OUT OF STOCK" : "ADD TO CART"}
+                            </button>
+
+                        </div>
+                    </div>
+                ))}
             </div>
-            <div className="product-info">
-              <h3>{prod.name}</h3>
-              <p><strong>Brand:</strong> {prod.brand}</p>
-              <p><strong>Size:</strong> {prod.size}</p>
-              <p><strong>Material:</strong> {prod.material}</p>
-              <p>{prod.description}</p>
-              <p>R {prod.price.toFixed(2)}</p>
-              <p><strong>Stock:</strong> {prod.stockQuantity}</p>
-              <button className="add-to-cart" onClick={() => addToCart(prod)}>
-                ADD TO CART
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+        </div>
+    );
 
-  const grouped = products.reduce((acc, p) => {
-    acc[p.category] = acc[p.category] || [];
-    acc[p.category].push(p);
-    return acc;
-  }, {});
+    const grouped = products.reduce((acc, p) => {
+        if (!p.category) p.category = "Uncategorized";
+        acc[p.category] = acc[p.category] || [];
+        acc[p.category].push(p);
+        return acc;
+    }, {});
 
-  return (
-    <div className="shop-container">
-      {Object.keys(grouped).map((cat) => renderCollection(cat, grouped[cat]))}
+    if (loading) return <p style={{ textAlign: "center" }}>Loading products...</p>;
+    if (error) return <p style={{ color: "red", textAlign: "center" }}>{error}</p>;
+    if (products.length === 0) return <p style={{ textAlign: "center" }}>No products found.</p>;
 
-      <style>{`
-        .shop-container { padding: 20px; max-width: 1200px; margin: auto; }
-        .collection-box { border-top: 2px solid #333; border-bottom: 2px solid #333; padding: 15px 0; margin-bottom: 30px; }
-        .shop-title { font-size: 24px; font-weight: bold; margin-bottom: 15px; text-align: center; }
-        .products-scroll { display: flex; overflow-x: auto; gap: 20px; padding-bottom: 10px; scrollbar-width: none; }
-        .products-scroll::-webkit-scrollbar { display: none; }
-        .product-card { flex: 0 0 auto; width: 200px; background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; flex-direction: column; align-items: center; transition: transform 0.2s ease; }
-        .product-card:hover { transform: translateY(-5px); }
-        .product-image-box { width: 100%; height: 150px; border-radius: 8px; display: flex; justify-content: center; align-items: center; overflow: hidden; background-color: #f9f9f9; margin-bottom: 10px; }
-        .product-image { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
-        .product-image:hover { transform: scale(1.1); }
-        .product-info { text-align: center; }
-        .product-info h3 { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
-        .product-info p { color: #555; margin-bottom: 5px; }
-        .add-to-cart { background: #ffd600; border: none; padding: 8px 12px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 3px 6px rgba(0,0,0,0.15); }
-        .add-to-cart:hover { background: #ffb300; transform: translateY(-2px); }
-        .add-to-cart:active { transform: scale(0.95); background: #ffa000; }
-      `}</style>
-    </div>
-  );
+    return (
+        <div className="shop-container">
+            {Object.keys(grouped).map((cat) => renderCollection(cat, grouped[cat]))}
+
+            <style>{`
+                html, body, #root {
+                    height: 100%;
+                    margin: 0;
+                    background-color: #f0f0f0; /* full-page grey background */
+                }
+                .shop-container {
+                    padding: 20px;
+                    max-width: 1200px;
+                    margin: auto;
+                    background-color: #f0f0f0; /* grey background */
+                    min-height: calc(100vh - 84px); /* full viewport minus navbar */
+                }
+                .collection-box {
+                    border-top: 2px solid #333;
+                    border-bottom: 2px solid #333;
+                    padding: 15px 0;
+                    margin-bottom: 30px;
+                }
+                .shop-title {
+                    font-size: 24px;
+                    font-weight: bold;
+                    margin-bottom: 15px;
+                    text-align: center;
+                }
+                .products-scroll {
+                    display: flex;
+                    overflow-x: auto;
+                    gap: 20px;
+                    padding-bottom: 10px;
+                    scrollbar-width: none;
+                }
+                .products-scroll::-webkit-scrollbar { display: none; }
+                .product-card {
+                    flex: 0 0 auto;
+                    width: 200px;
+                    background: #fff;
+                    border: 1px solid #ddd;
+                    border-radius: 10px;
+                    padding: 15px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    transition: transform 0.2s ease;
+                }
+                .product-card:hover { transform: translateY(-5px); }
+                .product-image-box {
+                    width: 100%;
+                    height: 150px;
+                    border-radius: 8px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    overflow: hidden;
+                    background-color: #f9f9f9;
+                    margin-bottom: 10px;
+                }
+                .product-image {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transition: transform 0.3s ease;
+                }
+                .product-image:hover { transform: scale(1.1); }
+                .product-info { text-align: center; }
+                .product-info h3 {
+                    font-size: 16px;
+                    font-weight: 600;
+                    margin-bottom: 5px;
+                }
+                .product-info p {
+                    color: #555;
+                    margin-bottom: 5px;
+                }
+                .add-to-cart {
+                    background: #09c;
+                    border: none;
+                    padding: 8px 12px;
+                    font-weight: bold;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+                }
+                .add-to-cart:hover {
+                    background: rgba(0, 130, 173, 1);
+                    transform: translateY(-2px);
+                }
+                .add-to-cart:active {
+                    transform: scale(0.95);
+                    background: #09c;
+                }
+            `}</style>
+        </div>
+    );
 }
