@@ -1,3 +1,9 @@
+/*
+222293985
+Lennox Komane
+group 3F
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { validateResetToken, resetPassword } from '../services/passwordResetApi';
