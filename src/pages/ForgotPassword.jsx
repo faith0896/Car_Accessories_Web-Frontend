@@ -1,3 +1,9 @@
+
+/*
+222293985
+Lennox Komane
+group 3F
+ */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestPasswordReset } from '../services/passwordResetApi';
@@ -58,7 +64,7 @@ export default function ForgotPassword() {
                 <div style={styles.card}>
                     {/* Removed envelope icon container */}
                     {/* <div style={styles.iconContainer}>
-                        <span style={styles.successIcon}>✉️</span>
+                        <span style={styles.successIcon}>✉</span>
                     </div> */}
                     <h1 style={styles.title}>Check Your Email</h1>
                     <p style={styles.message}>{message}</p>
@@ -96,7 +102,7 @@ export default function ForgotPassword() {
             <div style={styles.card}>
                 {/* Removed lock icon container */}
                 {/* <div style={styles.iconContainer}>
-                    <span style={styles.icon}>🔒</span>
+                    <span style={styles.icon}></span>
                 </div> */}
                 <h1 style={styles.title}>Forgot Password?</h1>
                 <p style={styles.subtitle}>
