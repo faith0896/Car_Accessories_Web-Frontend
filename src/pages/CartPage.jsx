@@ -15,7 +15,7 @@ export default function CartPage({ onClose }) {
     setCartId,
   } = useCart();
 
-  const { isAdmin } = useAuth();
+    const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
