@@ -7,3 +7,4 @@ export default class CartItem {
     this.product = product;        // Product object
   }
 }
+//

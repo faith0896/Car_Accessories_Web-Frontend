@@ -15,7 +15,7 @@ export default function CartPage({ onClose }) {
     setCartId,
   } = useCart();
 
-    const { isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +27,7 @@ export default function CartPage({ onClose }) {
       return null;
     }
   };
-
+ //Ensure admins cannot access checkout,protecting restricted actions
   useEffect(() => {
     if (isAdmin?.()) {
       alert("Admins are not allowed to perform checkout.");
@@ -49,56 +49,67 @@ export default function CartPage({ onClose }) {
     (sum, item) => sum + (item.price || 0) * (item.quantity || 1),
     0
   );
-
+ 
   const handleCheckout = async () => {
+    // Prevent admins from checking out
     if (isAdmin?.()) {
       alert("Admins are not allowed to checkout.");
       return;
     }
-
+  ///Prevent checkout if cart is empty
     if (!cartItems.length) {
       alert("Your cart is empty.");
       return;
     }
-
+  //Get logged-in user ID from localStorage(Check if user is logged in storage if not redirect to login to checkout)
     const localUserId = getLocalUserId();
     if (!localUserId) {
       alert("You must be logged in to checkout.");
       navigate("/login");
       return;
     }
-
+  //Set loading state to true (to show "Processing..." button)
     setLoading(true);
     try {
+   //Clear cart on frontend and navigate to payment page,backend should validate the user and cart    
       clearCart();
+  //
       if (onClose) onClose();
+  //navigate to payment page with cart details
       navigate("/payment", {
         state: { cartItems, total: cartTotal },
       });
     } catch (error) {
+    //Handle any errors during checkout
       alert("Checkout failed: " + (error?.message || "Unknown error"));
     } finally {
+    //Reset loading state making button clickable again
       setLoading(false);
     }
   };
-
+ //Main wrapper for cart page and show the tiele
   return (
     <div className="cart-container">
       <div className="cart-header">
         <h2>Your Cart</h2>
       </div>
+///Check if cart is empty show message else show cart items
 
       {cartItems.length === 0 ? (
         <p className="empty-cart">Your cart is empty.</p>
       ) : (
         <div className="cart-box">
+
+        ///Show how cart items are displayed with image,name,price,quantity input and total price per item
+        ///lets user remove item from cart and update quantity
+       
           {cartItems.map((item) => (
             <div key={item.productId || item.id} className="cart-item-card">
               <div className="cart-item-left">
                 <img
                   src={`http://localhost:8080/CarAccessories/product/image/${
                     item.productId || item.id
-                  }`}
+                  }`}  
                   alt={item.name}
                   className="cart-item-image"
                   onError={(e) => (e.target.src = "/placeholder.png")}
